@@ -7,13 +7,16 @@ typedef struct {
     };
 } cli_msg_t;
 
+#define STATS_SAMPLE 1000
 
 typedef struct {
     int cmd;
     int port;
     int direction;
+    int size;   // set on tx only
     int packets;
     int bytes;
+    int packets_other;
 } stats_msg_t;
 
 

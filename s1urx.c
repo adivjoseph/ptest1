@@ -1,5 +1,6 @@
+#define _GNU_SOURCE
 #include <stdio.h>
-
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -54,6 +55,8 @@ void* thS1uRx(void *ptr){
     simmSession_t *p_sess;
     int packetsSent = 0;
     int bytesSent = 0;
+    int core = *((int *)ptr);
+    cpu_set_t thdCpu;
     pFifo_stats = &g_msg_qs[msgq_s1uRx_to_stats];
     stats_msg.cmd = PORT_STATS;
     stats_msg.port = PORT_S1U;
@@ -62,7 +65,10 @@ void* thS1uRx(void *ptr){
 
     //init here
 
-    printf("thS1uRx started\n");
+    printf("thS1uRx started %d\n", core);
+    CPU_ZERO(&thdCpu);
+    CPU_SET(core, &thdCpu);
+    rtc = sched_setaffinity(0, sizeof(cpu_set_t), &thdCpu);
     /*open socket*/
     sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock == -1) {
@@ -111,6 +117,8 @@ void* thS1uRx(void *ptr){
         //printf("sgirx ethtype 0x%x\n",htons(p_ethHdr->frame_type ));
         if(htons(p_ethHdr->frame_type) == 0x806)
         {
+            stats_msg.packets_other++;
+
           //printf("sgirx arprx len %d\n", length);
             unsigned char buf_arp_dha[6];
             unsigned char buf_arp_dpa[4];
@@ -162,13 +170,15 @@ void* thS1uRx(void *ptr){
                // printf(" s1urx  match protocol %d 0x%x (0x%x) dest port %d\n",ip4hdr->protocol, ntohl(ip4hdr->daddr), sp_port->portIpAddr, ntohs(udphdr->dest) );   
                     packetsSent++;
                     bytesSent += length;
-                    if (packetsSent > 100) {
+                    if (packetsSent > STATS_SAMPLE) {
                         stats_msg.packets = packetsSent;
                         stats_msg.bytes = bytesSent;
                         while(enqueueFifo(pFifo_stats, &stats_msg));
                         packetsSent = 0;
                         stats_msg.packets = 0;
                         stats_msg.bytes = 0;
+                        stats_msg.packets_other = 0;
+
                     }
                 if (ip4hdr->protocol == 17 &&
                     ntohl(ip4hdr->daddr) == sp_port->portIpAddr) {
@@ -178,6 +188,9 @@ void* thS1uRx(void *ptr){
 
                 }
             }
+            else
+                stats_msg.packets_other++;
+
         }
 
     }

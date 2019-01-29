@@ -1,5 +1,6 @@
+#define _GNU_SOURCE
 #include <stdio.h>
-
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -52,6 +53,8 @@ void* thSgiRx(void *ptr){
     simmSession_t *p_sess;
     int packetsSent = 0;
     int bytesSent = 0;
+    int core = *((int *)ptr);
+    cpu_set_t thdCpu;
     pFifo_stats = &g_msg_qs[msgq_sgiRx_to_stats];
     stats_msg.cmd = PORT_STATS;
     stats_msg.port = PORT_SGI;
@@ -61,7 +64,10 @@ void* thSgiRx(void *ptr){
 
     //init here
 
-    printf("thSgiRx started\n");
+    printf("thSgiRx started %d\n", core);
+    CPU_ZERO(&thdCpu);
+    CPU_SET(core, &thdCpu);
+    rtc = sched_setaffinity(0, sizeof(cpu_set_t), &thdCpu);
     /*open socket*/
     sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock == -1) {
@@ -111,6 +117,7 @@ void* thSgiRx(void *ptr){
         //printf("sgirx ethtype 0x%x\n",htons(p_ethHdr->frame_type ));
         if(htons(p_ethHdr->frame_type) == 0x806)
         {
+            stats_msg.packets_other++;
           //printf("sgirx arprx len %d\n", length);
             unsigned char buf_arp_dha[6];
             unsigned char buf_arp_dpa[4];
@@ -166,13 +173,14 @@ void* thSgiRx(void *ptr){
                     //for us
                     packetsSent++;
                     bytesSent += length;
-                    if (packetsSent > 100) {
+                    if (packetsSent > STATS_SAMPLE) {
                         stats_msg.packets = packetsSent;
                         stats_msg.bytes = bytesSent;
                         while(enqueueFifo(pFifo_stats, &stats_msg));
                         packetsSent = 0;
                         stats_msg.packets = 0;
                         stats_msg.bytes = 0;
+                        stats_msg.packets_other = 0;
                     }
                     if(ntohs(udphdr->dest) == 80){
                         //printf(" sgi rsponse\n");
@@ -183,6 +191,8 @@ void* thSgiRx(void *ptr){
 
                 }
             }
+            else
+                stats_msg.packets_other++;
         }
 
     }

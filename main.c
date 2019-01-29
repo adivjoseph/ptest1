@@ -2,6 +2,8 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sched.h>
+#include <errno.h>
 #include "fifo.h"
 #include "config.h"
 #include "port.h"
@@ -33,8 +35,9 @@ sim_port_t g_ports[4];
 
 int main(void){	
     int i;
-    int iCore;
-    cpu_set_t core1, core2, core3
+    int iCore[16];
+    cpu_set_t cpu1;
+
     pthread_t pt_mmeTx;
     pthread_t pt_mmeRx;
 
@@ -45,7 +48,15 @@ int main(void){
 
     pthread_t pt_stats;
 
-
+    for (i = 0; i < 16; i++) {
+        iCore[i] = 17+i;
+    }
+    CPU_ZERO(&cpu1);
+    CPU_SET(16, &cpu1);
+    printf("main cpu %d\n", sched_getcpu());
+      
+    i = sched_setaffinity(0, sizeof(cpu_set_t), &cpu1);
+    printf("main cpu %d\n", sched_getcpu());
 
     portInit();
 
@@ -54,43 +65,40 @@ int main(void){
        initFifo(&g_msg_qs[i]);
     }
     //start stats threads
-    iCore = 16;
-    if(pthread_create(&pt_mmeTx, NULL, &thMmeTx, (void *) &iCore)) {
+    if(pthread_create(&pt_mmeTx, NULL, &thMmeTx, (void *) &iCore[0])) {
        printf("pthread_create failed thMmeTx \n");
        exit(1);
     }
 
-    if(pthread_create(&pt_mmeRx, NULL, &thMmeRx, NULL)) {
+
+    if(pthread_create(&pt_mmeRx, NULL, &thMmeRx, (void *) &iCore[1])) {
        printf("pthread_create failed thMmeRx \n");
        exit(1);
     }
 
-  
-
-
-    if(pthread_create(&pt_s1uTx, NULL, &thS1uTx, NULL)) {
+    if(pthread_create(&pt_s1uTx, NULL, &thS1uTx, (void *) &iCore[2])) {
        printf("pthread_create failed thS1uTx \n");
        exit(1);
     }
 
 
-    if(pthread_create(&pt_sgiRx, NULL, &thSgiRx, NULL)) {
+    if(pthread_create(&pt_sgiRx, NULL, &thSgiRx,(void *) &iCore[3])) {
        printf("pthread_create failed thSgiRx\n");
        exit(1);
     }
 
 
-    if(pthread_create(&pt_sgiTx, NULL, &thSgiTx, NULL)) {
+    if(pthread_create(&pt_sgiTx, NULL, &thSgiTx, (void *) &iCore[4])) {
        printf("pthread_create failed thSgiTx\n");
        exit(1);
     }
  
-    if(pthread_create(&pt_s1uRx, NULL, &thS1uRx, NULL)) {
+    if(pthread_create(&pt_s1uRx, NULL, &thS1uRx,(void *) &iCore[5])) {
        printf("pthread_create failed thS1uRx\n");
        exit(1);
     }
 
-     if(pthread_create(&pt_stats, NULL, &thStats, NULL)) {
+     if(pthread_create(&pt_stats, NULL, &thStats,(void *) &iCore[6])) {
        printf("pthread_create failed thStats\n");
        exit(1);
     }
@@ -152,10 +160,9 @@ int cbUeStart(int argc, char *argv[] ){
 
 
     cliMsgWork.cmd = REQ_START;
-//    if (argc) {
-//        burst = atoi(argv[1]);
-//        printf("  burts %d\n", burst);
-//    }
+    if (argc) {
+        cliMsgWork.arg1 = atoi(argv[1]);
+    }
 
     while(enqueueFifo(&g_msg_qs[msgq_cli_to_s1uTx], &cliMsgWork));
 
@@ -188,10 +195,9 @@ int cbSgiStart(int argc, char *argv[] ){
 
 
     cliMsgWork.cmd = REQ_START;
-//    if (argc) {
-//        burst = atoi(argv[1]);
-//        printf("  burts %d\n", burst);
-//    }
+    if (argc) {
+        cliMsgWork.arg1 = atoi(argv[1]);
+    }
 
     while(enqueueFifo(&g_msg_qs[msgq_cli_to_sgiTx], &cliMsgWork));
 

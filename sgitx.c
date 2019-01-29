@@ -1,5 +1,6 @@
+#define _GNU_SOURCE
 #include <stdio.h>
-
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -77,7 +78,12 @@ void* thSgiTx(void *ptr){
     stats_msg.cmd = PORT_STATS;
     stats_msg.port = PORT_SGI;
     stats_msg.direction = 0;
-    printf("thSgiTx started\n");
+    int core = *((int *)ptr);
+    cpu_set_t thdCpu;
+    printf("thSgiTx started %d\n", core);
+    CPU_ZERO(&thdCpu);
+    CPU_SET(core, &thdCpu);
+    rtc = sched_setaffinity(0, sizeof(cpu_set_t), &thdCpu);
     pFifo_cliIn = &g_msg_qs[msgq_cli_to_sgiTx];
     //init here
 
@@ -140,7 +146,7 @@ void* thSgiTx(void *ptr){
         }
     //bind to a core
     while (1){
-        if (packetsSent > 100) {
+        if (packetsSent > STATS_SAMPLE) {
             stats_msg.packets = packetsSent;
             stats_msg.bytes = bytesSent;
             while(enqueueFifo(pFifo_stats, &stats_msg));
@@ -160,9 +166,13 @@ void* thSgiTx(void *ptr){
                     sesContext[i].ueIp  =  ntohl(simmSessions[i].ueIpAddr);
                     sesContext[i].sgiIp =  0x0d010175;
                 }
-
+                if (cliMsgWork.arg1 > 0 && cliMsgWork.arg1 < 1400) {
+                    length = cliMsgWork.arg1;
+                }
+                else
+                    length = 1200;
+                stats_msg.size = length;
                 state = 1;
-                length =1200;
                 pf_setUeContextUe(&sendpkt, &sesContext[0]);
                 ph_setLengthsUe(&sendpkt, length);
  

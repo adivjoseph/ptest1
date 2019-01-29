@@ -1,5 +1,6 @@
+#define _GNU_SOURCE
 #include <stdio.h>
-
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -89,8 +90,13 @@ void* thS1uTx(void *ptr){
     int state = 0;
 
     sim_port_t *sp_port = &g_ports[PORT_S1U];
-    cli_msg_t cliMsgWork;
-    printf("thS1uTx started\n");
+    cli_msg_t cliMsgWork;   
+    int core = *((int *)ptr);
+    cpu_set_t thdCpu;
+    printf("thS1uTx started %d\n", core);
+    CPU_ZERO(&thdCpu);
+    CPU_SET(core, &thdCpu);
+    rtc = sched_setaffinity(0, sizeof(cpu_set_t), &thdCpu);
     pFifo_cliIn = &g_msg_qs[msgq_cli_to_s1uTx];
     pFifo_stats = &g_msg_qs[msgq_s1uTx_to_stats];
     stats_msg.cmd = PORT_STATS;
@@ -185,7 +191,7 @@ void* thS1uTx(void *ptr){
 
     //bind to a core
     while (1){
-        if (packetsSent > 100) {
+        if (packetsSent > STATS_SAMPLE) {
             stats_msg.packets = packetsSent;
             stats_msg.bytes = bytesSent;
             while(enqueueFifo(pFifo_stats, &stats_msg));
@@ -207,7 +213,12 @@ void* thS1uTx(void *ptr){
                         sesContext[i].ueIp  =  simmSessions[i].ueIpAddr;
                         sesContext[i].sgiIp =  0x0d010175;
                     }
-                    length =1200;
+                    if (cliMsgWork.arg1 > 0 && cliMsgWork.arg1 < 1400) {
+                        length = cliMsgWork.arg1;
+                    }
+                    else
+                        length = 1200;
+                    stats_msg.size = length;
                     state = 1;
                     pf_setUeContext(&sendpkt, &sesContext[0]);
                     ph_setLengths(&sendpkt, length);
@@ -238,6 +249,7 @@ void* thS1uTx(void *ptr){
             //length = 1450;
           //  printf("7\n");
             //printPkt(&sendpkt, length);
+            //MSG_DONTWAIT
             length = sendto(sock, (void *)&sendpkt, length, 0, (struct sockaddr*)&socket_address, sizeof(socket_address));
             if (length <= 0) {
                 printf("send failed\n");

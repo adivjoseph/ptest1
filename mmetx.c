@@ -120,9 +120,17 @@ void* thMmeTx(void *ptr){
 
     cli_msg_t cliMsgWork;
     simmSession_t *p_sess_msg = (simmSession_t *) &cliMsgWork.data[0];
-    printf("thMmeTx started\n");
+    int core = *((int *)ptr);
+    cpu_set_t thdCpu;
+    printf("thMmeTx started core %d\n", core);
+    CPU_ZERO(&thdCpu);
+    CPU_SET(core, &thdCpu);
+    rtc = sched_setaffinity(0, sizeof(cpu_set_t), &thdCpu);
+
+
     pFifo_cliIn = &g_msg_qs[msgq_cli_to_mmeTx];
     pFifo_mmeRx = &g_msg_qs[msgq_mmeRx_to_mmeTx];
+
     //init here
 
     cpAddr.sin_family    = AF_INET; // IPv4 

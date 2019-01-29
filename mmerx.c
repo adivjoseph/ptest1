@@ -1,5 +1,6 @@
+#define _GNU_SOURCE
 #include <stdio.h>
-
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -49,12 +50,17 @@ void* thMmeRx(void *ptr){
     cli_msg_t cliMsgWork;
  
     simmSession_t *p_sess;
+    int core = *((int *)ptr);
+    cpu_set_t thdCpu;
 
 
 
     //init here
 
-    printf("thMmeRx started\n");
+    printf("thMmeRx started %d\n", core);
+    CPU_ZERO(&thdCpu);
+    CPU_SET(core, &thdCpu);
+    rtc = sched_setaffinity(0, sizeof(cpu_set_t), &thdCpu);
     /*open socket*/
     sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock == -1) {

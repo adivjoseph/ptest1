@@ -1,5 +1,6 @@
+#define _GNU_SOURCE
 #include <stdio.h>
-
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,6 +22,8 @@ typedef struct direction_stats_s {
     long l_bytes_old;
     float     f_packet_per;
     float     f_bytes_per;
+    long l_packets_other;
+    int size;
  
 
 }direction_stats_t;
@@ -40,8 +43,13 @@ void* thStats(void *ptr){
     cli_msg_t cliMsgWork;
     port_stats_t *port;
     long l_duration;
+    int core = *((int *)ptr);
+    cpu_set_t thdCpu;
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_old);
-     printf("thSgiTx started\n");
+     printf("thSgiTx started %d\n", core);
+    CPU_ZERO(&thdCpu);
+    CPU_SET(core, &thdCpu);
+    rtc = sched_setaffinity(0, sizeof(cpu_set_t), &thdCpu);
 
     while (1){
         pFifo = &g_msg_qs[msgq_cli_to_stats];
@@ -50,16 +58,18 @@ void* thStats(void *ptr){
                 switch (cliMsgWork.cmd) {
                 case REQ_START:
                     //print stats
-                    printf("Stats:\t\t   tx pkts\t\trx pkts \t tx bytes \t rx bytes \ttxPps\trxPps\n");
+                    printf("Stats:\t len \t   tx pkts\t\trx pkts \t tx bytes \t rx bytes \ttxPps\trxPps    other rx\n");
                     for (i = 0; i <3; i++) {                   
-                        printf("%8s  %16ld  %16ld  %16ld  %16ld  %10.4f  %10.4f\n",
+                        printf("%8s:%4d  %16ld  %16ld  %16ld  %16ld  %10.4f  %10.4f  %16ld\n",
                           g_ports[i].portName,
+                           port_stats[i].direction[0].size,
                            port_stats[i].direction[0].l_packets,
                            port_stats[i].direction[1].l_packets,
                            port_stats[i].direction[0].l_bytes,
                            port_stats[i].direction[1].l_bytes,
                            port_stats[i].direction[0].f_packet_per,
-                           port_stats[i].direction[1].f_packet_per         );                    
+                           port_stats[i].direction[1].f_packet_per,
+                           port_stats[i].direction[1].l_packets_other             );                    
                     }
 
                     break;
@@ -75,8 +85,10 @@ void* thStats(void *ptr){
             if((rtc = dequeueFifo(pFifo, &statsMsg)) != 0) {
                 //printf("msg from cli %d\n",cliMsgWork.cmd);
                 port = &port_stats[statsMsg.port];
-                port->direction[statsMsg.direction].l_packets += (long ) statsMsg.packets;
+                port->direction[statsMsg.direction].l_packets += (long)statsMsg.packets;
                 port->direction[statsMsg.direction].l_bytes += (long ) statsMsg.bytes;
+                port->direction[statsMsg.direction].size =  statsMsg.size;
+                port->direction[statsMsg.direction].l_packets_other += (long)statsMsg.packets_other;
   
             }
 
