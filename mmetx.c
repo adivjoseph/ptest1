@@ -1,5 +1,6 @@
+#define _GNU_SOURCE
 #include <stdio.h>
-
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -92,6 +93,7 @@ char modifyBearerRequestPkt[100] = {
 0xc0, 0x00, 0x00, 0x00, 0x1b, 0x00, 0x5d, 0x00, /* ......]. */
 0x12, 0x00, 0x49, 0x00, 0x01, 0x00, 0x05, 0x57, /* ..I....W */
 0x00, 0x09, 0x00, 0x80, 0x01, 0x00, 0x00, 0x00, /* ........ */
+    //
 0x0b, 0x01, 0x01, 0x69, 0x57, 0x00, 0x09, 0x00, /* ...iW... */
 0x8a, 0x00, 0x00, 0x00, 0x01, 0x0a, 0x01, 0x0a, /* ........ */
 0x0b                                            /* . */
@@ -195,6 +197,13 @@ void* thMmeTx(void *ptr){
                modifyBearerRequestPkt[8] = 0xff & (g_mmeSeqNumber >> 16);
                modifyBearerRequestPkt[9] = 0xff & (g_mmeSeqNumber >> 8);
                modifyBearerRequestPkt[10] = 0xff & (g_mmeSeqNumber);
+
+               modifyBearerRequestPkt[30] = 0x0b;
+               modifyBearerRequestPkt[31] = 0x03;
+               modifyBearerRequestPkt[32] = 0x01;
+               modifyBearerRequestPkt[33] = 0x5c;
+
+
 
                 
                 sendto(sp_port->sockHandle, (const char *)modifyBearerRequestPkt, 47,  

@@ -24,19 +24,22 @@
          
 extern msgFifo_t g_msg_qs[8];
 extern sim_port_t g_ports[4]; 
-extern void decodeCreateResp(char * buff, cli_msg_t *msg);
 
 
 
 
 
-void* thMmeRx(void *ptr){
+
+void* thS1uRx(void *ptr){
     msgFifo_t *pFifo_cliIn;
+    msgFifo_t *pFifo_stats;
+    stats_msg_t stats_msg;
     int i, rtc, length;
     int sock;
     struct sockaddr_in     cpAddr; 
-    sim_port_t *sp_port = &g_ports[PORT_MME];
-    char rcBuffer[1024];
+    sim_port_t *sp_port = &g_ports[PORT_S1U];
+
+    char rcBuffer[2048];
     arp_ether_ipv4_t *p_arpHdr = (arp_ether_ipv4_t *) &rcBuffer[14];
     ether_hdr_t *p_ethHdr = (ether_hdr_t *)rcBuffer;
     struct ifreq ifr;
@@ -49,12 +52,17 @@ void* thMmeRx(void *ptr){
     cli_msg_t cliMsgWork;
  
     simmSession_t *p_sess;
-
+    int packetsSent = 0;
+    int bytesSent = 0;
+    pFifo_stats = &g_msg_qs[msgq_s1uRx_to_stats];
+    stats_msg.cmd = PORT_STATS;
+    stats_msg.port = PORT_S1U;
+    stats_msg.direction = 1;
 
 
     //init here
 
-    printf("thMmeArp started\n");
+    printf("thS1uRx started\n");
     /*open socket*/
     sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock == -1) {
@@ -72,13 +80,25 @@ void* thMmeRx(void *ptr){
     socket_address.sll_family = PF_PACKET;
     socket_address.sll_protocol = htons(ETH_P_IP);
     socket_address.sll_ifindex = ifindex;
-    socket_address.sll_hatype = ARPHRD_ETHER;
-    socket_address.sll_pkttype = PACKET_OTHERHOST;
-    socket_address.sll_halen = 0;
-    socket_address.sll_addr[6] = 0x00;
-    socket_address.sll_addr[7] = 0x00;
+//socket_address.sll_hatype = ARPHRD_ETHER;
+//socket_address.sll_pkttype = PACKET_OTHERHOST;
+ //   socket_address.sll_halen = 0;
+ //   socket_address.sll_addr[6] = 0x00;
+//socket_address.sll_addr[7] = 0x00;
 
 
+    strncpy(ifr.ifr_name, sp_port->portName, IFNAMSIZ);
+    if(setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, (char *)&ifr,  sizeof(ifr)) < 0) {
+
+        perror("s1u Socket bind failed");
+        exit (-1);
+        }
+
+//    rtc = bind(sock, (const struct sockaddr*)&socket_address, sizeof(socket_address));
+//	if (rtc == -1) {
+//        perror("s1uTx bind");
+//exit(1);
+//    }
 
     //bind to a core
     while (1){
@@ -88,9 +108,10 @@ void* thMmeRx(void *ptr){
             perror("recvfrom():");
             exit(1);
         }
+        //printf("sgirx ethtype 0x%x\n",htons(p_ethHdr->frame_type ));
         if(htons(p_ethHdr->frame_type) == 0x806)
         {
-            //printf("arprx len %d\n", length);
+          //printf("sgirx arprx len %d\n", length);
             unsigned char buf_arp_dha[6];
             unsigned char buf_arp_dpa[4];
 
@@ -138,16 +159,22 @@ void* thMmeRx(void *ptr){
                 p_ethHdr->dest_addr[5] == sp_port->portMac[5]) {
                 ip4hdr = (struct iphdr *)&rcBuffer[14];
                 udphdr = (struct udphdr *) &rcBuffer[32];
-                //printf("   match protocol %d 0x%x (0x%x) dest port %d\n",ip4hdr->protocol, ntohl(ip4hdr->daddr), sp_port->portIpAddr, ntohs(udphdr->dest) );   
+               // printf(" s1urx  match protocol %d 0x%x (0x%x) dest port %d\n",ip4hdr->protocol, ntohl(ip4hdr->daddr), sp_port->portIpAddr, ntohs(udphdr->dest) );   
+                    packetsSent++;
+                    bytesSent += length;
+                    if (packetsSent > 100) {
+                        stats_msg.packets = packetsSent;
+                        stats_msg.bytes = bytesSent;
+                        while(enqueueFifo(pFifo_stats, &stats_msg));
+                        packetsSent = 0;
+                        stats_msg.packets = 0;
+                        stats_msg.bytes = 0;
+                    }
                 if (ip4hdr->protocol == 17 &&
                     ntohl(ip4hdr->daddr) == sp_port->portIpAddr) {
-                    //for us
-                    if(ntohs(udphdr->dest) == 2123){
-                        //printf("  rsponse\n");
-                        decodeCreateResp(&rcBuffer[42], &cliMsgWork);
-
-                        while(enqueueFifo(&g_msg_qs[msgq_mmeRx_to_mmeTx], &cliMsgWork));
-                    }
+                        //printf(" sgi rsponse\n");
+       
+       
 
                 }
             }

@@ -148,6 +148,9 @@ void decodeCreateResp(char * buff, cli_msg_t *msg){
         while (index < ntohs(gtpHdr->gtpc.length)) {
             p_ie = (gtpv2c_ie *) &buff[index];
             printf("  %d %d %d\n", index, p_ie->type, ntohs(p_ie->length));
+            if (ntohs(p_ie->length) == 0 ){
+                break;
+            }
             switch (p_ie->type) {
             case 2:  //cause
                 // if first value 16 means accepted

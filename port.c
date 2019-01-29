@@ -40,14 +40,14 @@ int portInit(void){
     struct sockaddr_in mmeAddr;
 
      ph_updateEthernetList();
-
+     printf("setting mme_s11\n");
     sp_port->portName = "mme_s11";
     sp_port->portIpStr = "10.1.10.11";
+    sp_port->peerName = "cp_s11";
+    sp_port->peerIpStr = "10.1.10.41";
     ph_setPortIpAddr(sp_port->portIpStr, &sp_port->portIpAddr);
     ph_setPortMac(sp_port);
 
-    sp_port->peerName = "cp_s11";
-    sp_port->peerIpStr = "10.1.10.41";
     ph_setPortIpAddr(sp_port->peerIpStr, &sp_port->peerIpAddr);
     //ph_setPeerMac(sp_port);
 
@@ -75,14 +75,24 @@ int portInit(void){
 
 
     sp_port = &g_ports[PORT_S1U];
-
-    sp_port->portName = "mme_s1u";
+    printf("setting sim_s1u\n");
+    sp_port->portName = "sim_s1u";
     sp_port->portIpStr = "11.3.1.92";
-    ph_setPortIpAddr(sp_port->portIpStr, &sp_port->portIpAddr);
-    ph_setPortMac(sp_port);
-
     sp_port->peerName = "dp_s1u";
     sp_port->peerIpStr = "11.3.1.93";
+    ph_setPortIpAddr(sp_port->portIpStr, &sp_port->portIpAddr);
+    ph_setPortMac(sp_port);
+    ph_setPortIpAddr(sp_port->peerIpStr, &sp_port->peerIpAddr);
+
+
+    sp_port = &g_ports[PORT_SGI];
+    printf("setting sim_sgi\n");
+    sp_port->portName = "sim_sgi";
+    sp_port->portIpStr = "13.1.1.117";
+    sp_port->peerName = "dp_sgi";
+    sp_port->peerIpStr = "13.3.1.93";
+    ph_setPortIpAddr(sp_port->portIpStr, &sp_port->portIpAddr);
+    ph_setPortMac(sp_port);
     ph_setPortIpAddr(sp_port->peerIpStr, &sp_port->peerIpAddr);
 
     return 0;
@@ -175,12 +185,14 @@ void ph_setPortMac(sim_port_t *sp_port){
          }
      }
      pclose(fp);
+    // printf("peer %s\n",sp_port->peerName );
 
      sprintf(systemCommand,"cat /sys/class/net/%s/address", sp_port->peerName);
      fp = popen(systemCommand, "r");
       if (fgets(var, sizeof(var), fp) != NULL) 
       {
           strcpy(sp_port->peerMacStr, var);
+          //printf("var %s\n", var);
           printf("port %s  mac %s\n",  sp_port->peerName,sp_port->peerMacStr );
           for (j=0; j<6; j++) {
               sp_port->peerMac[j] = var[j*3 +1] < 'a' ? var[j*3 +1] - '0': var[j*3 +1] - 'a' +10;
